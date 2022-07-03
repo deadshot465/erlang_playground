@@ -6,44 +6,40 @@
 %%%-------------------------------------------------------------------
 -module(todo_cache).
 
--behaviour(gen_server).
+-behaviour(supervisor).
 
--export([start_link/1, start/0, server_process/1]).
--export([init/1, handle_call/3, handle_cast/2]).
+-export([start_link/0, server_process/1, child_spec/0]).
+-export([init/1]).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
--spec start() -> 'ignore' | {'error', _} | {'ok', pid()}.
-start() ->
-  gen_server:start({local, ?MODULE}, ?MODULE, [], []).
-
--spec start_link(_) -> any().
-start_link(_) ->
+-spec start_link() -> any().
+start_link() ->
   io:format("~s~n", ["Starting To-Do cache..."]),
-  gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+  supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 -spec server_process(_) -> any().
-server_process(ToDoListName) -> gen_server:call(?MODULE, {server_process, ToDoListName}).
-
--spec init([]) -> {'ok', #{}}.
-init([]) ->
-  todo_database:start_link(),
-  {ok, #{}}.
-
--spec handle_call({'server_process', _}, _, map()) -> {'reply', _, map()}.
-handle_call({server_process, ToDoListName}, _From, State) ->
-  case maps:find(ToDoListName, State) of
-    {ok, Value} -> {reply, Value, State};
-    _ ->
-      {ok, NewServer} = todo_server:start_link(ToDoListName),
-      {reply, NewServer, State#{ToDoListName => NewServer}}
+server_process(ToDoListName) ->
+  case supervisor:start_child(?MODULE, [ToDoListName]) of
+    {ok, Pid} -> Pid;
+    {error, {already_started, Pid}} -> Pid
   end.
 
--spec handle_cast(_, _) -> {'noreply', _}.
-handle_cast(_Request, State) ->
-  {noreply, State}.
+child_spec() ->
+  #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    type => supervisor
+  }.
+
+-spec init(_) -> {'ok', #{}}.
+init(_) ->
+  SupFlags = #{
+    strategy => simple_one_for_one
+  },
+  {ok, {SupFlags, [todo_server:child_spec()]}}.
 
 %%%===================================================================
 %%% Internal functions

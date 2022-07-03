@@ -6,59 +6,57 @@
 %%%-------------------------------------------------------------------
 -module(todo_database).
 
--behaviour(gen_server).
+-behaviour(supervisor).
 
--export([start_link/0, start/0, store/2, get/1]).
--export([init/1, handle_call/3, handle_cast/2]).
+-export([start_link/0, store/2, get/1, child_spec/0]).
+-export([init/1]).
 
--define(SERVER, ?MODULE).
 -define(FOLDER, "./persist").
+-define(POOL_SIZE, 3).
 
 -spec store(string(), any()) -> any().
 store(Key, Data) ->
-  WorkerPid = gen_server:call(?SERVER, {choose_worker, Key}),
-  todo_database_worker:store(WorkerPid, Key, Data).
+  WorkerId = choose_worker(Key),
+  todo_database_worker:store(WorkerId, Key, Data).
 
 -spec get(string()) -> any().
 get(Key) ->
-  WorkerPid = gen_server:call(?SERVER, {choose_worker, Key}),
-  todo_database_worker:get(WorkerPid, Key).
+  WorkerId = choose_worker(Key),
+  todo_database_worker:get(WorkerId, Key).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
--spec start() -> 'ignore' | {'error', _} | {'ok', pid()}.
-start() ->
-  gen_server:start({local, ?SERVER}, ?MODULE, [], []).
-
 -spec start_link() -> 'ignore' | {'error', _} | {'ok', pid()}.
 start_link() ->
-  io:format("~s~n", ["Starting database server..."]),
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
--spec init(_) -> {'ok', _}.
-init([]) ->
+  io:format("~s~n", ["Starting database server supervisor..."]),
   file:make_dir(?FOLDER),
-  Workers = lists:map(fun(Index) ->
-    {ok, Pid} = todo_database_worker:start_link(?FOLDER),
-    {Index, Pid}
-                          end, lists:seq(0, 2)),
-  {ok, maps:from_list(Workers)}.
+  supervisor:start_link(?MODULE, []).
 
--spec handle_call({'choose_worker', _}, _, map()) -> {'reply', pid(), map()}.
-handle_call({choose_worker, Key}, _From, Workers) ->
-  {reply, choose_worker(Key, Workers), Workers}.
+init(_) ->
+  SupFlags = #{
+    strategy => one_for_one
+  },
+  Children = lists:map(fun(Index) -> worker_spec(Index) end, lists:seq(1, ?POOL_SIZE)),
+  {ok, {SupFlags, Children}}.
 
--spec handle_cast(_, _) -> {'noreply', _}.
-handle_cast(_Request, Workers) ->
-  {noreply, Workers}.
+child_spec() ->
+  #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    type => supervisor
+  }.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec choose_worker(string(), map()) -> pid().
-choose_worker(Key, Workers) ->
-  Hash = erlang:phash2(Key, 3),
-  maps:get(Hash, Workers).
+choose_worker(Key) ->
+  erlang:phash2(Key, 3) + 1.
+
+worker_spec(WorkerId) ->
+  #{
+    id => WorkerId,
+    start => {todo_database_worker, start_link, [{?FOLDER, WorkerId}]}
+  }.

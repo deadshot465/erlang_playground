@@ -23,13 +23,8 @@ init(_) ->
     period => 10
   },
   ChildSpecs = [
-    #{
-      id => todo_cache,
-      start => {todo_cache, start_link, [[]]},
-      restart => permanent,
-      significant => false,
-      shutdown => brutal_kill,
-      type => worker
-    }
+    todo_registry:child_spec(),
+    todo_database:child_spec(),
+    todo_cache:child_spec()
   ],
   {ok, {SupFlags, ChildSpecs}}.

@@ -11,24 +11,24 @@
 -export([start_link/1, start/1, store/3, get/2]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
--spec store(atom() | pid() | {atom(), _} | {'via', atom(), _}, _, _) -> 'ok'.
-store(Pid, Key, Data) -> gen_server:cast(Pid, {store, Key, Data}).
+-spec store(integer(), _, _) -> 'ok'.
+store(WorkerId, Key, Data) -> gen_server:cast(via_tuple(WorkerId), {store, Key, Data}).
 
--spec get(atom() | pid() | {atom(), _} | {'via', atom(), _}, _) -> any().
-get(Pid, Key) -> gen_server:call(Pid, {get, Key}).
+-spec get(integer(), _) -> any().
+get(WorkerId, Key) -> gen_server:call(via_tuple(WorkerId), {get, Key}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
--spec start(string()) -> 'ignore' | {'error', _} | {'ok', pid()}.
-start(Folder) ->
-  gen_server:start(?MODULE, Folder, []).
+-spec start({string(), integer()}) -> 'ignore' | {'error', _} | {'ok', pid()}.
+start({Folder, WorkerId}) ->
+  gen_server:start(via_tuple(WorkerId), ?MODULE, Folder, []).
 
--spec start_link(string()) -> 'ignore' | {'error', _} | {'ok', pid()}.
-start_link(Folder) ->
+-spec start_link({string(), integer()}) -> 'ignore' | {'error', _} | {'ok', pid()}.
+start_link({Folder, WorkerId}) ->
   io:format("~s~n", ["Starting database worker..."]),
-  gen_server:start_link(?MODULE, Folder, []).
+  gen_server:start_link(via_tuple(WorkerId), ?MODULE, Folder, []).
 
 -spec init(_) -> {'ok', _}.
 init(Folder) ->
@@ -61,3 +61,6 @@ handle_cast({store, Key, Data}, Folder) ->
 -spec file_name(string(), string()) -> string().
 file_name(Key, Folder) ->
   Folder ++ "/" ++ Key.
+
+via_tuple(WorkerId) ->
+  todo_registry:via_tuple({?MODULE, WorkerId}).

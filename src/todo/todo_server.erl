@@ -13,7 +13,7 @@
 -include("todo_list_record.hrl").
 
 %% API
--export([start_link/1, start/1, add_entry/2, list_entries/1, delete_entry/2, update_entry/2]).
+-export([start_link/1, start/1, add_entry/2, list_entries/1, delete_entry/2, update_entry/2, child_spec/0, child_spec/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
@@ -26,13 +26,13 @@
 -spec start(string()) -> 'ignore' | {'error', _} | {'ok', pid()}.
 start(ToDoListName) ->
   io:format("Starting server for ~s~n...", [ToDoListName]),
-  gen_server:start(?MODULE, ToDoListName, []).
+  gen_server:start(via_tuple(ToDoListName), ?MODULE, ToDoListName, []).
 
 %% @doc Spawns the server and registers the local name (unique)
 -spec start_link(string()) -> 'ignore' | {'error', _} | {'ok', pid()}.
 start_link(ToDoListName) ->
   io:format("Starting server for ~s~n...", [ToDoListName]),
-  gen_server:start_link(?MODULE, ToDoListName, []).
+  gen_server:start_link(via_tuple(ToDoListName), ?MODULE, ToDoListName, []).
 
 -spec add_entry(atom() | pid() | {atom(), _} | {'via', atom(), _}, _) -> 'ok'.
 add_entry(Pid, Entry) -> gen_server:cast(Pid, {add, Entry}).
@@ -45,6 +45,20 @@ update_entry(Pid, Entry) -> gen_server:cast(Pid, {update, Entry}).
 
 -spec list_entries(atom() | pid() | {atom(), _} | {'via', atom(), _}) -> any().
 list_entries(Pid) -> gen_server:call(Pid, list).
+
+child_spec() ->
+  #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    restart => temporary
+  }.
+
+child_spec(ToDoListName) ->
+  #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, [ToDoListName]},
+    restart => temporary
+  }.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -94,3 +108,6 @@ handle_info({real_init, ToDoListName}, _) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+via_tuple(ToDoListName) ->
+  todo_registry:via_tuple({?MODULE, ToDoListName}).
