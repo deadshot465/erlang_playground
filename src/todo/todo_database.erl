@@ -8,7 +8,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, store/2, get/1, child_spec/0]).
+-export([store/2, get/1, child_spec/0]).
 -export([init/1]).
 
 -define(FOLDER, "./persist").
@@ -16,23 +16,15 @@
 
 -spec store(string(), any()) -> any().
 store(Key, Data) ->
-  WorkerId = choose_worker(Key),
-  todo_database_worker:store(WorkerId, Key, Data).
+  poolboy:transaction(?MODULE, fun(WorkerPid) -> todo_database_worker:store(WorkerPid, Key, Data) end).
 
 -spec get(string()) -> any().
 get(Key) ->
-  WorkerId = choose_worker(Key),
-  todo_database_worker:get(WorkerId, Key).
+  poolboy:transaction(?MODULE, fun(WorkerPid) -> todo_database_worker:get(WorkerPid, Key) end).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
-
--spec start_link() -> 'ignore' | {'error', _} | {'ok', pid()}.
-start_link() ->
-  io:format("~s~n", ["Starting database server supervisor..."]),
-  file:make_dir(?FOLDER),
-  supervisor:start_link(?MODULE, []).
 
 init(_) ->
   SupFlags = #{
@@ -42,18 +34,17 @@ init(_) ->
   {ok, {SupFlags, Children}}.
 
 child_spec() ->
-  #{
-    id => ?MODULE,
-    start => {?MODULE, start_link, []},
-    type => supervisor
-  }.
+  io:format("~s~n", ["Starting database server supervisor using poolboy..."]),
+  file:make_dir(?FOLDER),
+  poolboy:child_spec(?MODULE, [
+    {name, {local, ?MODULE}},
+    {worker_module, todo_database_worker},
+    {size, 3}
+  ], [?FOLDER]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-choose_worker(Key) ->
-  erlang:phash2(Key, 3) + 1.
 
 worker_spec(WorkerId) ->
   #{
