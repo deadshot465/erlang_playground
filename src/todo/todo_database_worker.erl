@@ -12,7 +12,7 @@
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -spec store(pid(), _, _) -> 'ok'.
-store(WorkerPid, Key, Data) -> gen_server:cast(WorkerPid, {store, Key, Data}).
+store(WorkerPid, Key, Data) -> gen_server:call(WorkerPid, {store, Key, Data}).
 
 -spec get(pid(), _) -> any().
 get(WorkerPid, Key) -> gen_server:call(WorkerPid, {get, Key}).
@@ -44,15 +44,18 @@ handle_call({get, Key}, From, Folder) ->
            end,
     gen_server:reply(From, Data)
         end),
-  {noreply, Folder}.
+  {noreply, Folder};
 
--spec handle_cast({'store', _, _}, _) -> {'noreply', _}.
-handle_cast({store, Key, Data}, Folder) ->
+handle_call({store, Key, Data}, From, Folder) ->
   spawn(fun() ->
     FilePath = file_name(Key, Folder),
-    file:write_file(FilePath, term_to_binary(Data))
+    file:write_file(FilePath, term_to_binary(Data)),
+    gen_server:reply(From, ok)
         end),
   {noreply, Folder}.
+
+handle_cast(_Request, State) ->
+  {noreply, State}.
 
 %%%===================================================================
 %%% Internal functions

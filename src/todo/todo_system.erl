@@ -23,7 +23,6 @@ init(_) ->
     period => 10
   },
   ChildSpecs = [
-    todo_registry:child_spec(),
     todo_database:child_spec(),
     todo_cache:child_spec()
   ],

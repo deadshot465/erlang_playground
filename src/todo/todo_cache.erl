@@ -22,9 +22,13 @@ start_link() ->
 
 -spec server_process(_) -> any().
 server_process(ToDoListName) ->
-  case supervisor:start_child(?MODULE, [ToDoListName]) of
-    {ok, Pid} -> Pid;
-    {error, {already_started, Pid}} -> Pid
+  case todo_server:whereis(ToDoListName) of
+    nil ->
+      case supervisor:start_child(?MODULE, [ToDoListName]) of
+        {ok, Pid} -> Pid;
+        {error, {already_started, Pid}} -> Pid
+      end;
+    Pid -> Pid
   end.
 
 child_spec() ->

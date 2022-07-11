@@ -8,14 +8,22 @@
 
 -behaviour(supervisor).
 
--export([store/2, get/1, child_spec/0]).
+-export([store/2, get/1, child_spec/0, store_local/2]).
 -export([init/1]).
 
 -define(FOLDER, "./persist").
 -define(POOL_SIZE, 3).
 
--spec store(string(), any()) -> any().
 store(Key, Data) ->
+  {_Results, BadNodes} = rpc:multicall(?MODULE, store_local, [Key, Data], timer:seconds(5)),
+  lists:foreach(fun(Node) ->
+    Message = io_lib:format("Store failed on node ~p.~n", [Node]),
+    io:format("~s", [lists:flatten(Message)])
+                end, BadNodes),
+  ok.
+
+-spec store_local(string(), any()) -> any().
+store_local(Key, Data) ->
   poolboy:transaction(?MODULE, fun(WorkerPid) -> todo_database_worker:store(WorkerPid, Key, Data) end).
 
 -spec get(string()) -> any().
@@ -34,13 +42,15 @@ init(_) ->
   {ok, {SupFlags, Children}}.
 
 child_spec() ->
+  NodeIdentifier = hd(string:tokens(erlang:atom_to_list(erlang:node()), "@")),
+  FolderName = ?FOLDER ++ "/" ++ NodeIdentifier,
   io:format("~s~n", ["Starting database server supervisor using poolboy..."]),
-  file:make_dir(?FOLDER),
+  file:make_dir(FolderName),
   poolboy:child_spec(?MODULE, [
     {name, {local, ?MODULE}},
     {worker_module, todo_database_worker},
     {size, 3}
-  ], [?FOLDER]).
+  ], [FolderName]).
 
 %%%===================================================================
 %%% Internal functions
